@@ -159,8 +159,8 @@ public:
   friend void RemoveResourceFiles(UsdBridgePrimCache* cache, UsdBridgeUsdWriter& usdWriter, 
     const char* resourceFolder, const char* extension);
 
-#ifdef USE_USDRT
-  void InitializeUsdRT();
+#ifdef STANDALONE_CARBSDK
+  void InitializeCarbSDK();
 #endif
 
   // Settings 

@@ -120,8 +120,6 @@ target_include_directories(UsdBridge
   PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/Mdl
     ${Boost_SEP_INCLUDE_DIR}
-    ${USDRT_ROOT_DIR}/include
-    ${CARBSDK_ROOT_DIR}/include
   )
 
 # Defs
@@ -166,6 +164,23 @@ target_link_libraries(UsdBridge
     ${CARBSDK_LIB}
 )
 
+# USDRT/CarbSDK
+
+option(USD_DEVICE_USE_USDRT "Enable usage of USDRT by supplying <USDRT/CARBSDK>_<INCLUDE/BIN>_DIR" OFF)
+option(USD_DEVICE_STANDALONE_CARBSDK "In case USD_DEVICE_USE_USDRT is enabled, use a standalone Carbonite SDK by supplying CARBSDK_LIB" OFF)
+if(${USD_DEVICE_USE_USDRT})
+  target_include_directories(UsdBridge
+  PRIVATE
+    ${USDRT_INCLUDE_DIR}
+    ${CARBSDK_INCLUDE_DIR}
+  )
+  target_compile_definitions(UsdBridge PRIVATE USE_USDRT )
+  if(${USD_DEVICE_STANDALONE_CARBSDK})
+    target_link_libraries(UsdBridge PRIVATE "${CARBSDK_BIN_DIR}/carb${CMAKE_STATIC_LIBRARY_SUFFIX}")
+    target_compile_definitions(UsdBridge PRIVATE STANDALONE_CARBSDK )
+  endif()
+endif()
+
 #Install UsdBridge
 
 #install(TARGETS UsdBridge
@@ -202,6 +217,24 @@ if(${INSTALL_USD_DEPS})
   install(
       FILES ${PYTHON_RUNTIME_LIBRARIES}
       DESTINATION ${PLATFORM_INSTALL_LIBDIR})
+
+  #Install CarbSdk
+  if(${USD_DEVICE_STANDALONE_CARBSDK})
+    install(
+      DIRECTORY "${USDRT_BIN_DIR}/"
+      DESTINATION ${PLATFORM_INSTALL_LIBDIR}
+      FILES_MATCHING
+      PATTERN "*${CMAKE_SHARED_LIBRARY_SUFFIX}*"
+      PATTERN "*.pdb"
+      REGEX "${USDRT_BIN_DIR}(/[^/]*)+/[^/]*$") # Any file that's not in the root of the bin dir will match
+    install(
+      DIRECTORY "${CARBSDK_BIN_DIR}/"
+      DESTINATION ${PLATFORM_INSTALL_LIBDIR}
+      FILES_MATCHING
+      PATTERN "*${CMAKE_SHARED_LIBRARY_SUFFIX}*"
+      PATTERN "*.pdb"
+      REGEX "${CARBSDK_BIN_DIR}(/[^/]*)+/[^/]*$")
+  endif()
 endif()
 
 message( "-------------------- End UsdBridge CmakeLists.txt ----------------------------------------")

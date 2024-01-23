@@ -6,7 +6,7 @@
 #include "UsdBridgeMdlStrings.h"
 #include "UsdBridgeUsdWriter_Common.h"
 
-#ifdef USE_USDRT
+#ifdef STANDALONE_CARBSDK
 #include "carb/ClientUtils.h"
 
 CARB_GLOBALS("anariUsdBridge")
@@ -92,8 +92,8 @@ UsdBridgeUsdWriter::UsdBridgeUsdWriter(const UsdBridgeSettings& settings)
     ConnectionSettings.WorkingDirectory = Settings.OutputPath;
   FormatDirName(ConnectionSettings.WorkingDirectory);
 
-#ifdef USE_USDRT
-  InitializeUsdRT();
+#ifdef STANDALONE_CARBSDK
+  InitializeCarbSDK();
 #endif
 }
 
@@ -101,8 +101,8 @@ UsdBridgeUsdWriter::~UsdBridgeUsdWriter()
 {
 }
 
-#ifdef USE_USDRT
-void UsdBridgeUsdWriter::InitializeUsdRT()
+#ifdef STANDALONE_CARBSDK
+void UsdBridgeUsdWriter::InitializeCarbSDK()
 {
   constexpr const char* const kPluginsSearchPaths[] = { ".", "plugins", "usdrt_only" };
   const std::vector<const char*> loadedFileWildcards{ "carb.imaging.plugin", "carb.dictionary.plugin", "carb.settings.plugin", "carb.graphics-*.plugin",
