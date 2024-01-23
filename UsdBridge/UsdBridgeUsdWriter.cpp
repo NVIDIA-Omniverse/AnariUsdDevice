@@ -6,6 +6,12 @@
 #include "UsdBridgeMdlStrings.h"
 #include "UsdBridgeUsdWriter_Common.h"
 
+#ifdef USE_USDRT
+#include "carb/ClientUtils.h"
+
+CARB_GLOBALS("anariUsdBridge")
+#endif
+
 TF_DEFINE_PUBLIC_TOKENS(
   UsdBridgeTokens,
 
@@ -85,11 +91,34 @@ UsdBridgeUsdWriter::UsdBridgeUsdWriter(const UsdBridgeSettings& settings)
   if(Settings.OutputPath)
     ConnectionSettings.WorkingDirectory = Settings.OutputPath;
   FormatDirName(ConnectionSettings.WorkingDirectory);
+
+#ifdef USE_USDRT
+  InitializeUsdRT();
+#endif
 }
 
 UsdBridgeUsdWriter::~UsdBridgeUsdWriter()
 {
 }
+
+#ifdef USE_USDRT
+void UsdBridgeUsdWriter::InitializeUsdRT()
+{
+  constexpr const char* const kPluginsSearchPaths[] = { ".", "plugins", "usdrt_only" };
+  const std::vector<const char*> loadedFileWildcards{ "carb.imaging.plugin", "carb.dictionary.plugin", "carb.settings.plugin", "carb.graphics-*.plugin",
+                "omni.gpucompute-*.plugin", "carb.flatcache.plugin", "carb.dictionary.serializer-*.plugin",
+                "usdrt.scenegraph.plugin" };
+
+  carb::Framework* framework = carb::acquireFrameworkAndRegisterBuiltins();
+
+  carb::PluginLoadingDesc desc = carb::PluginLoadingDesc::getDefault();
+  desc.loadedFileWildcards = loadedFileWildcards.data();
+  desc.loadedFileWildcardCount = loadedFileWildcards.size();
+  desc.searchPaths = kPluginsSearchPaths;
+  desc.searchPathCount = CARB_COUNTOF(kPluginsSearchPaths);
+  framework->loadPlugins(desc);
+}
+#endif
 
 void UsdBridgeUsdWriter::SetExternalSceneStage(UsdStageRefPtr sceneStage)
 {

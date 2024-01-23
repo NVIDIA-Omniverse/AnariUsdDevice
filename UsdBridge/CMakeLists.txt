@@ -120,6 +120,8 @@ target_include_directories(UsdBridge
   PRIVATE
     ${CMAKE_CURRENT_LIST_DIR}/Mdl
     ${Boost_SEP_INCLUDE_DIR}
+    ${USDRT_ROOT_DIR}/include
+    ${CARBSDK_ROOT_DIR}/include
   )
 
 # Defs
@@ -143,7 +145,7 @@ if (WIN32)
   # Combination of boost and python causes pragma linking issues for both libraries.
   message(STATUS "Python link dirs: ${USD_PYTHON_LINK_DIRS}")
   # Make sure to set link dirs public, since this is a static lib, so the dynamic boost libs will propagate to the parent project. 
-  target_link_directories(UsdBridge PUBLIC "${USD_PYTHON_LINK_DIRS}" "${USD_LIB_DIR}") 
+  target_link_directories(UsdBridge PUBLIC "${USD_PYTHON_LINK_DIRS}" "${USD_LIB_DIR}")
 else()
   set(PLATFORM_LIBS pthread dl stdc++fs)
   target_compile_definitions(UsdBridge PRIVATE _GLIBCXX_USE_CXX11_ABI=0 )
@@ -161,6 +163,7 @@ target_link_libraries(UsdBridge
     UsdBridge_Connect
     ${USD_TARGETS}
     ${USD_PYTHON_TARGETS}
+    ${CARBSDK_LIB}
 )
 
 #Install UsdBridge
