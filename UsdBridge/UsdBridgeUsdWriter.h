@@ -16,6 +16,10 @@ PXR_NAMESPACE_USING_DIRECTIVE
 #include <memory>
 #include <functional>
 
+#ifdef STANDALONE_CARBSDK
+struct UsdBridgeCarbLogger;
+#endif
+
 //Includes detailed usd translation interface of Usd Bridge
 class UsdBridgeUsdWriter
 {
@@ -159,15 +163,18 @@ public:
   friend void RemoveResourceFiles(UsdBridgePrimCache* cache, UsdBridgeUsdWriter& usdWriter, 
     const char* resourceFolder, const char* extension);
 
-#ifdef STANDALONE_CARBSDK
-  void InitializeCarbSDK();
-#endif
-
   // Settings 
   UsdBridgeSettings Settings;
   UsdBridgeConnectionSettings ConnectionSettings;
 
   UsdBridgeLogObject LogObject;
+
+#ifdef STANDALONE_CARBSDK
+  void InitializeCarbSDK();
+  void CleanupCarbSDK();
+
+  UsdBridgeCarbLogger* CarbLogObject;
+#endif
 
 protected:
   // Connect
