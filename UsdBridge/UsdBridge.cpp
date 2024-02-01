@@ -8,6 +8,15 @@
 
 #include <string>
 #include <memory>
+#include <algorithm>
+
+#ifdef STANDALONE_CARBSDK
+#include "carb/ClientUtils.h"
+#include "carb/logging/ILogging.h"
+#include "carb/logging/Logger.h"
+
+CARB_GLOBALS("anariUsdBridge")
+#endif
 
 #define BRIDGE_CACHE Internals->Cache
 #define BRIDGE_USDWRITER Internals->UsdWriter
@@ -129,6 +138,10 @@ struct UsdBridgeInternals
       if(this->Cache.ValidIterator(it)) 
         this->Cache.RemoveChild(parentCache, it->second.get());
     };
+
+#ifdef STANDALONE_CARBSDK
+    InitializeCarbSDK();
+#endif
   }
 
   ~UsdBridgeInternals()
@@ -167,6 +180,13 @@ struct UsdBridgeInternals
   UsdBridgePrimCacheList TempPrimCaches;
   SdfPrimPathList TempPrimPaths;
   SdfPrimPathList ProtoPrimPaths;
+
+#ifdef STANDALONE_CARBSDK
+  void InitializeCarbSDK();
+  void CleanupCarbSDK();
+
+  UsdBridgeCarbLogger* CarbLogObject;
+#endif
 };
 
 
@@ -245,6 +265,100 @@ bool HasNullHandles(const HandleType* handles, uint64_t numHandles)
       return true;
   return false;
 }
+
+#ifdef STANDALONE_CARBSDK
+struct UsdBridgeCarbLogger : public carb::logging::Logger
+{
+  UsdBridgeCarbLogger()
+  {
+    this->handleMessage = CarbLogCallback;
+
+    if(carb::Framework* framework = carb::getFramework())
+    {
+      if(CarbLogIface = framework->acquireInterface<carb::logging::ILogging>())
+      {
+        CarbLogIface->addLogger(this);
+        CarbLogIface->setLogEnabled(true);
+        CarbLogIface->setLevelThreshold(carb::logging::kLevelVerbose);
+      }
+    }
+  }
+
+  ~UsdBridgeCarbLogger()
+  {
+    if(CarbLogIface)
+    {
+      CarbLogIface->removeLogger(this);
+      CarbLogIface = nullptr;
+    }
+  }
+
+  static void CarbLogCallback(carb::logging::Logger* logger,
+    const char* source,
+    int32_t level,
+    const char* filename,
+    const char* functionName,
+    int lineNumber,
+    const char* message)
+  {
+    int lala = 0;
+  }
+
+  static void SetCarbLogVerbosity(int logVerbosity)
+  {
+    carb::Framework* framework = carb::getFramework();
+    carb::logging::ILogging* logIface = framework->acquireInterface<carb::logging::ILogging>();
+    if(framework && logIface)
+    {
+      logIface->setLevelThreshold(
+        std::max(carb::logging::kLevelVerbose, carb::logging::kLevelFatal - logVerbosity) );
+    }
+  }
+
+  carb::logging::ILogging* CarbLogIface = nullptr;
+};
+
+void UsdBridgeInternals::InitializeCarbSDK()
+{
+  static bool isInitialized = false;
+  if(!isInitialized)
+  {
+    if(carb::Framework* framework = carb::acquireFrameworkAndRegisterBuiltins())
+    {
+      framework->registerPlugin(g_carbClientName, framework->getBuiltinLoggingDesc());
+    }
+  }
+
+  CarbLogObject = new UsdBridgeCarbLogger();
+
+  if(!isInitialized)
+  {
+    carb::Framework* framework = carb::getFramework();
+
+    if(framework)
+    {
+      constexpr const char* const kPluginsSearchPaths[] = { ".", "plugins", "usdrt_only", "plugins/scenegraph" };
+      const std::vector<const char*> loadedFileWildcards{ "carb.dictionary.plugin", "carb.dictionary.serializer-*.plugin", "carb.settings.plugin",
+                    "omni.gpucompute-*.plugin", "omni.fabric.plugin", "usdrt.scenegraph.plugin" };
+
+      carb::PluginLoadingDesc desc = carb::PluginLoadingDesc::getDefault();
+      desc.loadedFileWildcards = loadedFileWildcards.data();
+      desc.loadedFileWildcardCount = loadedFileWildcards.size();
+      desc.searchPaths = kPluginsSearchPaths;
+      desc.searchPathCount = CARB_COUNTOF(kPluginsSearchPaths);
+      framework->loadPlugins(desc);
+
+      isInitialized = true;
+    }
+  }
+}
+
+void UsdBridgeInternals::CleanupCarbSDK()
+{
+  delete CarbLogObject;
+  CarbLogObject = nullptr;
+}
+#endif
 
 UsdBridge::UsdBridge(const UsdBridgeSettings& settings) 
   : Internals(new UsdBridgeInternals(settings))
@@ -1026,4 +1140,8 @@ void UsdBridge::SetConnectionLogVerbosity(int logVerbosity)
 {
   int logLevel = UsdBridgeRemoteConnection::GetConnectionLogLevelMax() - logVerbosity; // Just invert verbosity to get the level
   UsdBridgeRemoteConnection::SetConnectionLogLevel(logLevel);
+
+#ifdef STANDALONE_CARBSDK
+  UsdBridgeCarbLogger::SetCarbLogVerbosity(logVerbosity);
+#endif
 }

@@ -39,6 +39,7 @@
 #include <pxr/usd/usdGeom/scope.h>
 #include <pxr/usd/usdVol/volume.h>
 #include <pxr/usd/usdVol/openVDBAsset.h>
+#include <pxr/usd/usdUtils/stageCache.h>
 #include <pxr/usd/sdf/layer.h>
 #include <pxr/usd/sdf/path.h>
 #include <pxr/usd/usdShade/material.h>

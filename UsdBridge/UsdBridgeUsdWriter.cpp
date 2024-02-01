@@ -5,14 +5,6 @@
 #include "UsdBridgeMdlStrings.h"
 #include "UsdBridgeUsdWriter_Common.h"
 
-#ifdef STANDALONE_CARBSDK
-#include "carb/ClientUtils.h"
-#include "carb/logging/ILogging.h"
-#include "carb/logging/Logger.h"
-
-CARB_GLOBALS("anariUsdBridge")
-#endif
-
 TF_DEFINE_PUBLIC_TOKENS(
   UsdBridgeTokens,
 
@@ -80,48 +72,6 @@ namespace constring
   
 #define ATTRIB_TOKENS_ADD(r, data, elem) AttributeTokens.push_back(UsdBridgeTokens->elem);
 
-#ifdef STANDALONE_CARBSDK
-struct UsdBridgeCarbLogger : public carb::logging::Logger
-{
-  UsdBridgeCarbLogger()
-  {
-    this->handleMessage = CarbLogCallback;
-
-    if(carb::Framework* framework = carb::getFramework())
-    {
-      if(CarbLogIface = framework->acquireInterface<carb::logging::ILogging>())
-      {
-        CarbLogIface->addLogger(this);
-        CarbLogIface->setLogEnabled(true);
-        CarbLogIface->setLevelThreshold(carb::logging::kLevelVerbose);
-      }
-    }
-  }
-
-  ~UsdBridgeCarbLogger()
-  {
-    if(CarbLogIface)
-    {
-      CarbLogIface->removeLogger(this);
-      CarbLogIface = nullptr;
-    }
-  }
-
-  static void CarbLogCallback(carb::logging::Logger* logger,
-    const char* source,
-    int32_t level,
-    const char* filename,
-    const char* functionName,
-    int lineNumber,
-    const char* message)
-  {
-    int lala = 0;
-  }
-
-  carb::logging::ILogging* CarbLogIface = nullptr;
-};
-#endif
-
 UsdBridgeUsdWriter::UsdBridgeUsdWriter(const UsdBridgeSettings& settings)
   : Settings(settings)
   , VolumeWriter(Create_VolumeWriter(), std::mem_fn(&UsdBridgeVolumeWriterI::Release))
@@ -134,58 +84,11 @@ UsdBridgeUsdWriter::UsdBridgeUsdWriter(const UsdBridgeSettings& settings)
   if(Settings.OutputPath)
     ConnectionSettings.WorkingDirectory = Settings.OutputPath;
   FormatDirName(ConnectionSettings.WorkingDirectory);
-
-#ifdef STANDALONE_CARBSDK
-  InitializeCarbSDK();
-#endif
 }
 
 UsdBridgeUsdWriter::~UsdBridgeUsdWriter()
 {
 }
-
-#ifdef STANDALONE_CARBSDK
-void UsdBridgeUsdWriter::InitializeCarbSDK()
-{
-  static bool isInitialized = false;
-  if(!isInitialized)
-  {
-    if(carb::Framework* framework = carb::acquireFrameworkAndRegisterBuiltins())
-    {
-      framework->registerPlugin(g_carbClientName, framework->getBuiltinLoggingDesc());
-    }
-  }
-
-  CarbLogObject = new UsdBridgeCarbLogger();
-
-  if(!isInitialized)
-  {
-    carb::Framework* framework = carb::getFramework();
-
-    if(framework)
-    {
-      constexpr const char* const kPluginsSearchPaths[] = { ".", "plugins", "usdrt_only", "plugins/scenegraph" };
-      const std::vector<const char*> loadedFileWildcards{ "carb.dictionary.plugin", "carb.dictionary.serializer-*.plugin", "carb.settings.plugin",
-                    "omni.gpucompute-*.plugin", "omni.fabric.plugin", "usdrt.scenegraph.plugin" };
-
-      carb::PluginLoadingDesc desc = carb::PluginLoadingDesc::getDefault();
-      desc.loadedFileWildcards = loadedFileWildcards.data();
-      desc.loadedFileWildcardCount = loadedFileWildcards.size();
-      desc.searchPaths = kPluginsSearchPaths;
-      desc.searchPathCount = CARB_COUNTOF(kPluginsSearchPaths);
-      framework->loadPlugins(desc);
-
-      isInitialized = true;
-    }
-  }
-}
-
-void UsdBridgeUsdWriter::CleanupCarbSDK()
-{
-  delete CarbLogObject;
-  CarbLogObject = nullptr;
-}
-#endif
 
 void UsdBridgeUsdWriter::SetExternalSceneStage(UsdStageRefPtr sceneStage)
 {

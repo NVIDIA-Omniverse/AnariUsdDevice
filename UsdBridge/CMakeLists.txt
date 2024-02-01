@@ -4,7 +4,7 @@ if (WIN32)
 cmake_minimum_required(VERSION 3.15 FATAL_ERROR)
 endif()
 
-set(CMAKE_CXX_STANDARD 14)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
@@ -101,11 +101,15 @@ set(USDBRIDGE_SOURCES
   UsdBridgeUsdWriter_Material.cpp
   UsdBridgeUsdWriter_Volume.cpp
   UsdBridgeTimeEvaluator.cpp
+  UsdBridgeCarb.cpp
+  UsdBridgeRt.cpp
   UsdBridge.h
   UsdBridgeCaches.h
   UsdBridgeUsdWriter.h
   UsdBridgeUsdWriter_Common.h
   UsdBridgeTimeEvaluator.h
+  UsdBridgeCarb.h
+  UsdBridgeRt.h
   usd.h
   ${USDBRIDGE_MDL_SOURCES}
 )
@@ -172,6 +176,9 @@ if(${USD_DEVICE_USE_USDRT})
   target_include_directories(UsdBridge
   PRIVATE
     ${USDRT_INCLUDE_DIR}
+    "${USDRT_INCLUDE_DIR}/usdrt_only"
+    "${USDRT_INCLUDE_DIR}/../../gsl/include"
+    "${USDRT_INCLUDE_DIR}/../../pybind11/include"
     ${CARBSDK_INCLUDE_DIR}
   )
   target_compile_definitions(UsdBridge PRIVATE USE_USDRT )

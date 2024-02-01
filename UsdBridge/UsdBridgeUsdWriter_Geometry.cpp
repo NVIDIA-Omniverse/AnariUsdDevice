@@ -4,6 +4,7 @@
 #include "UsdBridgeUsdWriter.h"
 
 #include "UsdBridgeUsdWriter_Common.h"
+#include "UsdBridgeRt.h"
 
 namespace
 {
@@ -1120,6 +1121,8 @@ void UsdBridgeUsdWriter::UpdateUsdGeometryManifest(const UsdBridgePrimCache* cac
 
 void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, const SdfPath& meshPath, const UsdBridgeMeshData& geomData, double timeStep)
 {
+  UsdBridgeRt primData(this->SceneStage, timeVarStage);
+
   // To avoid data duplication when using of clip stages, we need to potentially use the scenestage prim for time-uniform data.
   UsdGeomMesh uniformGeom = UsdGeomMesh::Get(this->SceneStage, meshPath);
   assert(uniformGeom);

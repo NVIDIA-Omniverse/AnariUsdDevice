@@ -169,13 +169,6 @@ public:
 
   UsdBridgeLogObject LogObject;
 
-#ifdef STANDALONE_CARBSDK
-  void InitializeCarbSDK();
-  void CleanupCarbSDK();
-
-  UsdBridgeCarbLogger* CarbLogObject;
-#endif
-
 protected:
   // Connect
   std::unique_ptr<UsdBridgeConnection> Connect = nullptr;

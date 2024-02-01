@@ -20,3 +20,5 @@
 #if defined(VALUE_CLIP_RETIMING) && !defined(TIME_BASED_CACHING)
 #define TIME_BASED_CACHING
 #endif
+
+#define USDBRIDGE_MAX_LOG_VERBOSITY 4
