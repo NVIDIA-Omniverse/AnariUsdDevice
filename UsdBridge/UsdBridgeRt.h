@@ -10,6 +10,8 @@ class UsdBridgeRt
     UsdBridgeRt(const PXR_NS::UsdStagePtr& sceneStage, const PXR_NS::UsdStagePtr& timeVarStage);
     ~UsdBridgeRt();
 
+    void geomUpdate(const PXR_NS::SdfPath& primPath);
+
   protected:
 
     UsdBridgeRtInternals* Internals = nullptr;

@@ -179,6 +179,8 @@ if(${USD_DEVICE_USE_USDRT})
     "${USDRT_INCLUDE_DIR}/usdrt_only"
     "${USDRT_INCLUDE_DIR}/../../gsl/include"
     "${USDRT_INCLUDE_DIR}/../../pybind11/include"
+    "${USDRT_INCLUDE_DIR}/../../cuda/include"
+    "${USDRT_INCLUDE_DIR}/../.."
     ${CARBSDK_INCLUDE_DIR}
   )
   target_compile_definitions(UsdBridge PRIVATE USE_USDRT )
@@ -241,6 +243,11 @@ if(${INSTALL_USD_DEPS})
       PATTERN "*${CMAKE_SHARED_LIBRARY_SUFFIX}*"
       PATTERN "*.pdb"
       REGEX "${CARBSDK_BIN_DIR}(/[^/]*)+/[^/]*$")
+    install(
+      DIRECTORY "${RTXPLUGINS_BIN_DIR}/"
+      DESTINATION ${PLATFORM_INSTALL_LIBDIR}
+      FILES_MATCHING
+      REGEX "${RTXPLUGINS_BIN_DIR}/plugins/omni.usd/[^/]*$")
   endif()
 endif()
 

@@ -307,8 +307,8 @@ struct UsdBridgeCarbLogger : public carb::logging::Logger
   static void SetCarbLogVerbosity(int logVerbosity)
   {
     carb::Framework* framework = carb::getFramework();
-    carb::logging::ILogging* logIface = framework->acquireInterface<carb::logging::ILogging>();
-    if(framework && logIface)
+    carb::logging::ILogging* logIface = framework ? framework->tryAcquireInterface<carb::logging::ILogging>() : nullptr;
+    if(logIface)
     {
       logIface->setLevelThreshold(
         std::max(carb::logging::kLevelVerbose, carb::logging::kLevelFatal - logVerbosity) );
@@ -337,9 +337,9 @@ void UsdBridgeInternals::InitializeCarbSDK()
 
     if(framework)
     {
-      constexpr const char* const kPluginsSearchPaths[] = { ".", "plugins", "usdrt_only", "plugins/scenegraph" };
+      constexpr const char* const kPluginsSearchPaths[] = { ".", "plugins", "usdrt_only", "plugins/scenegraph", "plugins/omni.usd" };
       const std::vector<const char*> loadedFileWildcards{ "carb.dictionary.plugin", "carb.dictionary.serializer-*.plugin", "carb.settings.plugin",
-                    "omni.gpucompute-*.plugin", "omni.fabric.plugin", "usdrt.scenegraph.plugin" };
+                    "omni.gpucompute-*.plugin", "omni.fabric*.plugin", "omni.tbb.globalcontrol.plugin", "carb.tasking.plugin", "usdrt.scenegraph.plugin" };
 
       carb::PluginLoadingDesc desc = carb::PluginLoadingDesc::getDefault();
       desc.loadedFileWildcards = loadedFileWildcards.data();

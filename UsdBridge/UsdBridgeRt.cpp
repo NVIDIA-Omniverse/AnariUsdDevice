@@ -13,6 +13,7 @@
 #include <usdrt/scenegraph/usd/usd/prim.h>
 #include <usdrt/scenegraph/usd/usd/attribute.h>
 #include <usdrt/scenegraph/usd/usdGeom/tokens.h>
+#include <usdrt/scenegraph/usd/usdGeom/primvarsAPI.h>
 #endif
 
 #ifdef USE_USDRT
@@ -26,12 +27,15 @@ namespace
   UsdRtStageRefPtrType ToUsdRtStage(const PXR_NS::UsdStagePtr& usdStage)
   {
 #ifdef USE_USDRT
-    UsdUtilsStageCache& stageCache = PXR_NS::UsdUtilsStageCache::Get();
+    PXR_NS::UsdStageCache& stageCache = PXR_NS::UsdUtilsStageCache::Get();
+
+    usdrt::UsdStageRefPtr stage = usdrt::UsdStage::Open("./data/test.usda");
 
     // If stage doesn't exist in stagecache, insert
     PXR_NS::UsdStageCache::Id usdStageId = stageCache.GetId(usdStage);
     if(!usdStageId.IsValid())
-      usdStageId = PXR_NS::UsdUtilsStageCache::Get().Insert(usdStage);
+      usdStageId = stageCache.Insert(usdStage);
+    assert(usdStageId.IsValid());
 
     omni::fabric::UsdStageId stageId(usdStageId.ToLongInt());
 
@@ -44,18 +48,19 @@ namespace
 
 class UsdBridgeRtInternals
 {
-  UsdBridgeRtInternals(const PXR_NS::UsdStagePtr& sceneStage, const PXR_NS::UsdStagePtr& timeVarStage)
-  {
-    SceneStage = ToUsdRtStage(sceneStage);
-    TimeVarStage = ToUsdRtStage(timeVarStage);
-  }
+  public:
+    UsdBridgeRtInternals(const PXR_NS::UsdStagePtr& sceneStage, const PXR_NS::UsdStagePtr& timeVarStage)
+    {
+      SceneStage = ToUsdRtStage(sceneStage);
+      TimeVarStage = ToUsdRtStage(timeVarStage);
+    }
 
-  UsdRtStageRefPtrType SceneStage;
-  UsdRtStageRefPtrType TimeVarStage;
+    UsdRtStageRefPtrType SceneStage;
+    UsdRtStageRefPtrType TimeVarStage;
 };
 
 UsdBridgeRt::UsdBridgeRt(const PXR_NS::UsdStagePtr& sceneStage, const PXR_NS::UsdStagePtr& timeVarStage)
-  Internals(new UsdBridgeRtInternals(sceneStage, timeVarStage))
+  : Internals(new UsdBridgeRtInternals(sceneStage, timeVarStage))
 {
 }
 
@@ -70,17 +75,18 @@ using namespace usdrt;
 PXR_NAMESPACE_USING_DIRECTIVE
 #endif
 
-/*
+
+void UsdBridgeRt::geomUpdate(const PXR_NS::SdfPath& geomPath)
 {
 
-  // To avoid data duplication when using of clip stages, we need to potentially use the scenestage prim for time-uniform data.
-  UsdGeomMesh uniformGeom = UsdGeomMesh::Get(this->SceneStage, meshPath);
+  UsdGeomMesh uniformGeom = UsdGeomMesh::Get(this->SceneStage, geomPath);
   assert(uniformGeom);
   UsdGeomPrimvarsAPI uniformPrimvars(uniformGeom);
 
-  UsdGeomMesh timeVarGeom = UsdGeomMesh::Get(timeVarStage, meshPath);
+  UsdGeomMesh timeVarGeom = UsdGeomMesh::Get(this->TimeVarStage, geomPath);
   assert(timeVarGeom);
   UsdGeomPrimvarsAPI timeVarPrimvars(timeVarGeom);
 
+
+
 }
-*/
