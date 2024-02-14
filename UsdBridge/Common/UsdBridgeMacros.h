@@ -5,6 +5,10 @@
 
 #define USE_USD_GEOM_POINTS
 
+#if defined(USE_FABRIC) && !defined(USE_USDRT)
+#define USE_USDRT // Force USDRT when Fabric is enabled
+#endif
+
 #define OMNIVERSE_CREATE_WORKAROUNDS
 //#define CUSTOM_PBR_MDL
 #define USE_INDEX_MATERIALS

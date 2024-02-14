@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+include(CMakeDependentOption)
 include(usdhelpers.cmake)
 
 # USD
@@ -107,6 +108,7 @@ set(USDBRIDGE_SOURCES
   UsdBridgeCaches.h
   UsdBridgeUsdWriter.h
   UsdBridgeUsdWriter_Common.h
+  UsdBridgeUsdWriter_Arrays.h
   UsdBridgeTimeEvaluator.h
   UsdBridgeCarb.h
   UsdBridgeRt.h
@@ -170,9 +172,11 @@ target_link_libraries(UsdBridge
 
 # USDRT/CarbSDK
 
-option(USD_DEVICE_USE_USDRT "Enable usage of USDRT by supplying <USDRT/CARBSDK>_<INCLUDE/BIN>_DIR" OFF)
-option(USD_DEVICE_STANDALONE_CARBSDK "In case USD_DEVICE_USE_USDRT is enabled, use a standalone Carbonite SDK by supplying CARBSDK_LIB" OFF)
+option(USD_DEVICE_USE_USDRT "Enable usage of USDRT by supplying <USDRT/CARBSDK>_<INCLUDE/BIN>_DIR and CUDAToolkit_ROOT" OFF)
+cmake_dependent_option(USD_DEVICE_USE_FABRIC "Enable usage of Fabric" OFF "USD_DEVICE_USE_USDRT" OFF)
+cmake_dependent_option(USD_DEVICE_STANDALONE_CARBSDK "Use a standalone Carbonite SDK by supplying CARBSDK_LIB" OFF "USD_DEVICE_USE_USDRT" OFF)
 if(${USD_DEVICE_USE_USDRT})
+  find_package(CUDAToolkit)
   target_include_directories(UsdBridge
   PRIVATE
     ${USDRT_INCLUDE_DIR}
@@ -183,10 +187,14 @@ if(${USD_DEVICE_USE_USDRT})
     "${USDRT_INCLUDE_DIR}/../.."
     ${CARBSDK_INCLUDE_DIR}
   )
-  target_compile_definitions(UsdBridge PRIVATE USE_USDRT )
+  target_link_libraries(UsdBridge PRIVATE CUDA::cudart)
+  target_compile_definitions(UsdBridge PRIVATE USE_USDRT)
+  if(${USD_DEVICE_USE_FABRIC})
+    target_compile_definitions(UsdBridge PRIVATE USE_FABRIC )
+  endif()
   if(${USD_DEVICE_STANDALONE_CARBSDK})
     target_link_libraries(UsdBridge PRIVATE "${CARBSDK_BIN_DIR}/carb${CMAKE_STATIC_LIBRARY_SUFFIX}")
-    target_compile_definitions(UsdBridge PRIVATE STANDALONE_CARBSDK )
+    target_compile_definitions(UsdBridge PRIVATE STANDALONE_CARBSDK)
   endif()
 endif()
 

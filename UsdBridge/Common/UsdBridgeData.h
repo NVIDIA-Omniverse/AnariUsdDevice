@@ -644,5 +644,22 @@ public:
   T& Data;
 };
 
-#endif
+template<typename EltType>
+class UsdBridgeSpanRdI
+{
+  public:
+    virtual const EltType* begin() const = 0;
+    virtual const EltType* end() const = 0;
+    virtual size_t size() const = 0;
+};
 
+template<typename EltType>
+class UsdBridgeSpanWrI
+{
+  public:
+    virtual EltType* begin() = 0;
+    virtual EltType* end() = 0;
+    virtual size_t size() const = 0;
+};
+
+#endif

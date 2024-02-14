@@ -4,6 +4,7 @@
 #include "UsdBridgeUsdWriter.h"
 
 #include "UsdBridgeUsdWriter_Common.h"
+#include "UsdBridgeUsdWriter_Arrays.h"
 #include "stb_image_write.h"
 
 #include <limits>

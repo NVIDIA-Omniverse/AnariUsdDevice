@@ -4,6 +4,7 @@
 #include "UsdBridgeUsdWriter.h"
 
 #include "UsdBridgeUsdWriter_Common.h"
+#include "UsdBridgeUsdWriter_Arrays.h"
 #include "UsdBridgeRt.h"
 
 namespace
@@ -80,7 +81,7 @@ namespace
 
       if(timeVarChecked)
       {
-        SdfValueTypeName primvarType = GetPrimvarArrayType(attrib.DataType);
+        SdfValueTypeName primvarType = GetPrimvarAttribArrayType(attrib.DataType);
         if(primvarType == SdfValueTypeNames->BoolArray)
         {
           UsdBridgeLogMacro(writer->LogObject, UsdBridgeLogLevel::WARNING, "UsdGeom Attribute<" << attribIndex << "> primvar does not support source data type: " << attrib.DataType);
@@ -297,7 +298,7 @@ namespace
         const void* arrayData = geomData.Points;
         size_t arrayNumElements = geomData.NumPoints;
         UsdAttribute arrayPrimvar = pointsAttr;
-        VtVec3fArray& usdVerts = GetStaticTempArray<VtVec3fArray>();
+        VtVec3fArray& usdVerts = GetStaticTempArray<VtVec3fArray>(arrayNumElements);
         bool setPrimvar = true;
 
         switch (geomData.PointsType)
@@ -339,8 +340,7 @@ namespace
 
       uint64_t numIndices = geomData.NumIndices;
 
-      VtArray<int>& usdVertexCounts = GetStaticTempArray<VtIntArray>();
-      usdVertexCounts.resize(numPrims);
+      VtArray<int>& usdVertexCounts = GetStaticTempArray<VtIntArray>(numPrims);
       int vertexCount = numIndices / numPrims;
       for (uint64_t i = 0; i < numPrims; ++i)
         usdVertexCounts[i] = vertexCount;//geomData.FaceVertCounts[i];
@@ -351,8 +351,7 @@ namespace
 
       if (!geomData.Indices)
       {
-        VtIntArray& tempIndices = GetStaticTempArray<VtIntArray>();
-        tempIndices.resize(numIndices);
+        VtIntArray& tempIndices = GetStaticTempArray<VtIntArray>(numIndices);
         for (uint64_t i = 0; i < numIndices; ++i)
           tempIndices[i] = (int)i;
 
@@ -469,7 +468,8 @@ namespace
   }
 
   template<typename GeomDataType>
-  void UpdateUsdGeomAttribute(UsdBridgeUsdWriter* writer, UsdGeomPrimvarsAPI& timeVarPrimvars, UsdGeomPrimvarsAPI& uniformPrimvars, const GeomDataType& geomData, uint64_t numPrims,
+  void UpdateUsdGeomAttribute(UsdBridgeUsdWriter* writer, UsdBridgeRt& usdRtData,
+    UsdGeomPrimvarsAPI& timeVarPrimvars, UsdGeomPrimvarsAPI& uniformPrimvars, const GeomDataType& geomData, uint64_t numPrims,
     UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval, uint32_t attribIndex)
   {
     assert(attribIndex < geomData.NumAttributes);
@@ -478,13 +478,13 @@ namespace
     TfToken attribToken = bridgeAttrib.Name ? writer->AttributeNameToken(bridgeAttrib.Name) : AttribIndexToToken(attribIndex);
     UsdGeomPrimvar uniformPrimvar = uniformPrimvars.GetPrimvar(attribToken);
     // The uniform primvar has to exist, otherwise any timevarying data will be ignored as well
-    if(!uniformPrimvar || uniformPrimvar.GetTypeName() != GetPrimvarArrayType(bridgeAttrib.DataType))
+    if(!uniformPrimvar || uniformPrimvar.GetTypeName() != GetPrimvarAttribArrayType(bridgeAttrib.DataType))
     {
       CreateUsdGeomAttributePrimvar(writer, uniformPrimvars, geomData, attribIndex); // No timeEval, to force attribute primvar creation on the uniform api
     }
 
     UsdGeomPrimvar timeVarPrimvar = timeVarPrimvars.GetPrimvar(attribToken);
-    if(!timeVarPrimvar || timeVarPrimvar.GetTypeName() != GetPrimvarArrayType(bridgeAttrib.DataType)) // even though new clipstages initialize the correct primvar type/name, it may still be wrong for existing ones (or primstages if so configured)
+    if(!timeVarPrimvar || timeVarPrimvar.GetTypeName() != GetPrimvarAttribArrayType(bridgeAttrib.DataType)) // even though new clipstages initialize the correct primvar type/name, it may still be wrong for existing ones (or primstages if so configured)
     {
       CreateUsdGeomAttributePrimvar(writer, timeVarPrimvars, geomData, attribIndex, &timeEval);
     }
@@ -514,7 +514,9 @@ namespace
           size_t arrayNumElements = bridgeAttrib.PerPrimData ? numPrims : geomData.NumPoints;
           UsdAttribute arrayPrimvar = attributePrimvar;
 
-          AssignAttribArrayToPrimvar(writer->LogObject, arrayData, bridgeAttrib.DataType, arrayNumElements, arrayPrimvar, timeCode);
+          // USDRT_REM
+          //AssignAttribArrayToPrimvar(writer->LogObject, arrayData, bridgeAttrib.DataType, arrayNumElements, arrayPrimvar, timeCode);
+          usdRtData.UpdateAttributes(writer->LogObject, arrayData, bridgeAttrib.DataType, arrayNumElements, arrayPrimvar, timeCode, timeVaryingUpdate);
 
           // Per face or per-vertex interpolation. This will break timesteps that have been written before.
           TfToken attribInterpolation = bridgeAttrib.PerPrimData ? UsdGeomTokens->uniform : UsdGeomTokens->vertex;
@@ -529,7 +531,8 @@ namespace
   }
 
   template<typename GeomDataType>
-  void UpdateUsdGeomAttributes(UsdBridgeUsdWriter* writer, UsdGeomPrimvarsAPI& timeVarPrimvars, UsdGeomPrimvarsAPI& uniformPrimvars, const GeomDataType& geomData, uint64_t numPrims,
+  void UpdateUsdGeomAttributes(UsdBridgeUsdWriter* writer, UsdBridgeRt& usdRtData,
+    UsdGeomPrimvarsAPI& timeVarPrimvars, UsdGeomPrimvarsAPI& uniformPrimvars, const GeomDataType& geomData, uint64_t numPrims,
     UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
   {
     uint32_t startIdx = 0;
@@ -537,7 +540,7 @@ namespace
     {
       const UsdBridgeAttribute& attrib = geomData.Attributes[attribIndex];
       if(attrib.DataType != UsdBridgeType::UNDEFINED)
-        UpdateUsdGeomAttribute(writer, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval, attribIndex);
+        UpdateUsdGeomAttribute(writer, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval, attribIndex);
     }
   }
 
@@ -558,14 +561,14 @@ namespace
     {
       UsdTimeCode timeCode = timeEval.Eval(DMI::COLORS);
 
-      UsdGeomPrimvar colorPrimvar = timeVaryingUpdate ? timeVarDispPrimvar : uniformDispPrimvar;
+      UsdAttribute colorAttrib = timeVaryingUpdate ? timeVarDispPrimvar : uniformDispPrimvar;
 
       if (geomData.Colors != nullptr)
       {
         size_t arrayNumElements = geomData.PerPrimColors ? numPrims : geomData.NumPoints;
-        assert(colorPrimvar);
+        assert(colorAttrib);
 
-        AssignColorArrayToPrimvar(writer->LogObject, geomData.Colors, arrayNumElements, geomData.ColorsType, timeEval.Eval(DMI::COLORS), colorPrimvar.GetAttr());
+        AssignColorArrayToPrimvar(writer->LogObject, geomData.Colors, arrayNumElements, geomData.ColorsType, timeEval.Eval(DMI::COLORS), colorAttrib);
 
         // Per face or per-vertex interpolation. This will break timesteps that have been written before.
         TfToken colorInterpolation = geomData.PerPrimColors ? UsdGeomTokens->uniform : UsdGeomTokens->vertex;
@@ -573,7 +576,7 @@ namespace
       }
       else
       {
-        colorPrimvar.GetAttr().Set(SdfValueBlock(), timeCode);
+        colorAttrib.Set(SdfValueBlock(), timeCode);
       }
     }
   }
@@ -656,8 +659,7 @@ namespace
         // Remember that widths define a diameter, so a default width (1.0) corresponds to a scale of 0.5.
         if(geomData.getUniformScale() != 0.5f)
         {
-          VtFloatArray& usdWidths = GetStaticTempArray<VtFloatArray>();
-          usdWidths.resize(geomData.NumPoints);
+          VtFloatArray& usdWidths = GetStaticTempArray<VtFloatArray>(geomData.NumPoints);
           for(auto& x : usdWidths) x = geomData.getUniformScale() * 2.0f;
           widthsAttribute.Set(usdWidths, timeCode);
         }
@@ -707,8 +709,7 @@ namespace
         if(!usdbridgenumerics::isIdentity(geomData.Scale))
         {
           GfVec3f defaultScale(geomData.Scale.Data);
-          VtVec3fArray& usdScales = GetStaticTempArray<VtVec3fArray>();
-          usdScales.resize(geomData.NumPoints);
+          VtVec3fArray& usdScales = GetStaticTempArray<VtVec3fArray>(geomData.NumPoints);
           for(auto& x : usdScales) x = defaultScale;
           scalesAttribute.Set(usdScales, timeCode);
         }
@@ -754,8 +755,7 @@ namespace
       else
       {
         //GfVec3f defaultNormal(1, 0, 0);
-        //VtVec3fArray& usdNormals = GetStaticTempArray<VtVec3fArray>();
-        //usdNormals.resize(geomData.NumPoints);
+        //VtVec3fArray& usdNormals = GetStaticTempArray<VtVec3fArray>(geomData.NumPoints);
         //for(auto& x : usdNormals) x = defaultNormal;
         //normalsAttribute.Set(usdNormals, timeCode);
         normalsAttribute.Set(SdfValueBlock(), timeCode);
@@ -781,10 +781,9 @@ namespace
       // Orientations
       UsdAttribute orientationsAttribute = outGeom.GetOrientationsAttr();
       assert(orientationsAttribute);
-      VtQuathArray& usdOrients = GetStaticTempArray<VtQuathArray>();
+      VtQuathArray& usdOrients = GetStaticTempArray<VtQuathArray>(geomData.NumPoints);
       if (geomData.Orientations)
       {
-        usdOrients.resize(geomData.NumPoints);
         switch (geomData.OrientationsType)
         {
         case UsdBridgeType::FLOAT3: { ConvertNormalsToQuaternions<float>(usdOrients, geomData.Orientations, geomData.NumPoints); break; }
@@ -808,7 +807,6 @@ namespace
         if(!usdbridgenumerics::isIdentity(geomData.Orientation))
         {
           GfQuath defaultOrient(geomData.Orientation.Data[0], geomData.Orientation.Data[1], geomData.Orientation.Data[2], geomData.Orientation.Data[3]);
-          usdOrients.resize(geomData.NumPoints);
           for(auto& x : usdOrients) x = defaultOrient;
           orientationsAttribute.Set(usdOrients, timeCode);
         }
@@ -853,8 +851,7 @@ namespace
       }
       else
       {
-        VtIntArray& protoIndices = GetStaticTempArray<VtIntArray>();
-        protoIndices.resize(geomData.NumPoints);
+        VtIntArray& protoIndices = GetStaticTempArray<VtIntArray>(geomData.NumPoints);
         for(auto& x : protoIndices) x = 0;
         protoIndexAttr.Set(protoIndices, timeCode);
       }
@@ -883,7 +880,7 @@ namespace
       {
         GfVec3f* linVels = (GfVec3f*)geomData.LinearVelocities;
 
-        VtVec3fArray& usdVelocities = GetStaticTempArray<VtVec3fArray>();
+        VtVec3fArray& usdVelocities = GetStaticTempArray<VtVec3fArray>(geomData.NumPoints);
         usdVelocities.assign(linVels, linVels + geomData.NumPoints);
         linearVelocitiesAttribute.Set(usdVelocities, timeCode);
       }
@@ -916,7 +913,7 @@ namespace
       {
         GfVec3f* angVels = (GfVec3f*)geomData.AngularVelocities;
 
-        VtVec3fArray& usdAngularVelocities = GetStaticTempArray<VtVec3fArray>();
+        VtVec3fArray& usdAngularVelocities = GetStaticTempArray<VtVec3fArray>(geomData.NumPoints);
         usdAngularVelocities.assign(angVels, angVels + geomData.NumPoints);
         angularVelocitiesAttribute.Set(usdAngularVelocities, timeCode);
       }
@@ -1121,8 +1118,6 @@ void UsdBridgeUsdWriter::UpdateUsdGeometryManifest(const UsdBridgePrimCache* cac
 
 void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, const SdfPath& meshPath, const UsdBridgeMeshData& geomData, double timeStep)
 {
-  UsdBridgeRt primData(this->SceneStage, timeVarStage);
-
   // To avoid data duplication when using of clip stages, we need to potentially use the scenestage prim for time-uniform data.
   UsdGeomMesh uniformGeom = UsdGeomMesh::Get(this->SceneStage, meshPath);
   assert(uniformGeom);
@@ -1136,6 +1131,8 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
   UsdBridgeUpdateEvaluator<const UsdBridgeMeshData> updateEval(geomData);
   TimeEvaluator<UsdBridgeMeshData> timeEval(geomData, timeStep);
 
+  UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, meshPath);
+
   assert((geomData.NumIndices % geomData.FaceVertexCount) == 0);
   uint64_t numPrims = int(geomData.NumIndices) / geomData.FaceVertexCount;
 
@@ -1143,7 +1140,8 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
   UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomNormals);
   if( Settings.EnableStTexCoords && UsdGeomDataHasTexCoords(geomData) )
     { UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomTexCoords); }
-  UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes);
+  //UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes); // USDRT_REM
+  UpdateUsdGeomAttributes(this, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval);
   UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomColors);
   UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomIndices);
 }
@@ -1152,6 +1150,8 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
 {
   UsdBridgeUpdateEvaluator<const UsdBridgeInstancerData> updateEval(geomData);
   TimeEvaluator<UsdBridgeInstancerData> timeEval(geomData, timeStep);
+
+  UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, instancerPath);
 
   bool useGeomPoints = geomData.UseUsdGeomPoints;
 
@@ -1173,7 +1173,8 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
     UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomOrientNormals);
     if( Settings.EnableStTexCoords && UsdGeomDataHasTexCoords(geomData) )
       { UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomTexCoords); }
-    UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes);
+    //UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes); // USDRT_REM
+    UpdateUsdGeomAttributes(this, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval);
     UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomColors);
   }
   else
@@ -1192,7 +1193,8 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
     UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomOrientations);
     if( Settings.EnableStTexCoords && UsdGeomDataHasTexCoords(geomData) )
       { UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomTexCoords); }
-    UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes);
+    //UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes); // USDRT_REM
+    UpdateUsdGeomAttributes(this, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval);
     UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomColors);
     UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomProtoIndices);
     //UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomLinearVelocities);
@@ -1216,13 +1218,16 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
   UsdBridgeUpdateEvaluator<const UsdBridgeCurveData> updateEval(geomData);
   TimeEvaluator<UsdBridgeCurveData> timeEval(geomData, timeStep);
 
+  UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, curvePath);
+
   uint64_t numPrims = geomData.NumCurveLengths;
 
   UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomPoints);
   UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomNormals);
   if( Settings.EnableStTexCoords && UsdGeomDataHasTexCoords(geomData) )
     { UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomTexCoords); }
-  UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes);
+  //UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes); // USDRT_REM
+  UpdateUsdGeomAttributes(this, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval);
   UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomColors);
   UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomWidths);
   UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomCurveLengths);
