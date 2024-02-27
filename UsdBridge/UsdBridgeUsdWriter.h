@@ -16,7 +16,7 @@ PXR_NAMESPACE_USING_DIRECTIVE
 #include <memory>
 #include <functional>
 
-#ifdef STANDALONE_CARBSDK
+#ifdef USE_USDRT
 struct UsdBridgeCarbLogger;
 #endif
 

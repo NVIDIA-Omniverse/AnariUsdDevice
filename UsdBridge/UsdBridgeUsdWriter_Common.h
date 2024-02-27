@@ -659,4 +659,22 @@ namespace
   }
 }
 
+#define CREATE_REMOVE_TIMEVARYING_ATTRIB(_prim, _dataMemberId, _token, _type) \
+  if(!timeEval || timeEval->IsTimeVarying(_dataMemberId)) \
+    _prim.CreateAttribute(_token, _type); \
+  else \
+    _prim.RemoveProperty(_token);
+
+#define CREATE_REMOVE_TIMEVARYING_ATTRIB_QUALIFIED(_dataMemberId, _CreateFunc, _token) \
+  if(!timeEval || timeEval->IsTimeVarying(_dataMemberId)) \
+    attribCreatePrim._CreateFunc(); \
+  else \
+    attribRemovePrim.RemoveProperty(_token);
+
+#define SET_TIMEVARYING_ATTRIB(_timeVaryingUpdate, _timeVarAttrib, _uniformAttrib, _value) \
+  if(_timeVaryingUpdate) \
+    _timeVarAttrib.Set(_value, timeEval.TimeCode); \
+  else \
+    _uniformAttrib.Set(_value, timeEval.Default());
+
 #endif

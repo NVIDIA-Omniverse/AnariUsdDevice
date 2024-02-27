@@ -5,6 +5,9 @@
 #include "UsdBridgeRt.h"
 
 #ifdef USE_USDRT
+#include <usdrt/scenegraph/base/gf/quath.h>
+#include <usdrt/scenegraph/base/gf/quatf.h>
+#include <usdrt/scenegraph/base/gf/quatd.h>
 #include <usdrt/scenegraph/base/vt/array.h>
 #include <usdrt/scenegraph/base/tf/token.h>
 #include <usdrt/scenegraph/usd/sdf/path.h>
@@ -120,7 +123,7 @@ struct UsdBridgeFabricSpanInit
 };
 
 template<typename EltType>
-class UsdBridgeFabricSpan : public UsdBridgeSpanWrI<EltType>
+class UsdBridgeFabricSpan : public UsdBridgeSpanI<EltType>
 {
   public:
     UsdBridgeFabricSpan(UsdBridgeFabricSpanInit& spanInit)
@@ -134,7 +137,21 @@ class UsdBridgeFabricSpan : public UsdBridgeSpanWrI<EltType>
       return nullptr;
     }
 
+    const EltType* begin() const override
+    {
+      if(AttribSpan.size())
+        return &AttribSpan[0];
+      return nullptr;
+    }
+
     EltType* end() override
+    {
+      if(AttribSpan.size())
+        return &AttribSpan[0]+AttribSpan.size();
+      return nullptr;
+    }
+
+    const EltType* end() const override
     {
       if(AttribSpan.size())
         return &AttribSpan[0]+AttribSpan.size();
@@ -153,20 +170,25 @@ class UsdBridgeFabricSpan : public UsdBridgeSpanWrI<EltType>
 };
 #endif
 
-void UsdBridgeRt::UpdateAttributes(const UsdBridgeLogObject& logObj, const void* arrayData, UsdBridgeType arrayDataType, size_t arrayNumElements, 
+template<typename ReturnEltType>
+UsdBridgeSpanI<ReturnEltType>* UsdBridgeRt::UpdateUsdAttribute(const UsdBridgeLogObject& logObj, const void* arrayData, UsdBridgeType arrayDataType, size_t arrayNumElements,
   const ::PXR_NS::UsdAttribute& attrib, const ::PXR_NS::UsdTimeCode& timeCode, bool timeVaryingUpdate)
 {
+  ::PXR_NS::SdfValueTypeName attribValueType = attrib.GetTypeName();
+  using RtReturnEltType = UsdBridgeTypeTraits::PxrToRtEltType<ReturnEltType>::Type;
+
 #ifdef USE_FABRIC
 
   omni::fabric::StageReaderWriterId stageReaderWriterId = (timeVaryingUpdate ? Internals->TimeVarStage : Internals->SceneStage)->GetStageReaderWriterId();
   omni::fabric::StageReaderWriter stageReaderWriter(stageReaderWriterId);
 
+  const std::string& attribName = attrib.GetName().GetString();
   omni::fabric::Path fPrimPath(attrib.GetPrimPath().GetString().c_str());
-  omni::fabric::Token fAttribName(attrib.GetName().GetString().c_str());
+  omni::fabric::Token fAttribName(attribName.c_str());
 
   UsdBridgeFabricSpanInit fabricSpanInit(arrayNumElements, fPrimPath, fAttribName, stageReaderWriter);
-  AssignAttribArrayToPrimvar<UsdBridgeFabricSpanInit, UsdBridgeFabricSpan>(
-    logObj, arrayData, arrayDataType, arrayNumElements, fabricSpanInit);
+  UsdBridgeSpanI<RtReturnEltType>* rtSpan = AssignArrayToAttribute<UsdBridgeFabricSpanInit, UsdBridgeFabricSpan, RtReturnEltType>(
+    logObj, arrayData, arrayDataType, arrayNumElements, attribValueType, fabricSpanInit);
 
 #else
 
@@ -183,7 +205,19 @@ void UsdBridgeRt::UpdateAttributes(const UsdBridgeLogObject& logObj, const void*
   assert(rtAttrib);
 
   AttribSpanInit spanInit(arrayNumElements, &rtAttrib, &rtTimeCode);
-  AssignAttribArrayToPrimvar(logObj, arrayData, arrayDataType, arrayNumElements, spanInit);
+  UsdBridgeSpanI<RtReturnEltType>* rtSpan = AssignArrayToAttribute<AttribSpanInit, AttribSpan, RtReturnEltType>(
+    logObj, arrayData, arrayDataType, arrayNumElements, attribValueType, spanInit);
 
 #endif
+
+  // usd and rt elt types should be compatible
+  return reinterpret_cast<UsdBridgeSpanI<ReturnEltType>*>(rtSpan);
 }
+
+#define UPDATE_USD_ATTRIBUTE_EXPLICIT_DEFINITION(SpecializedEltType)\
+  template UsdBridgeSpanI<SpecializedEltType>* UsdBridgeRt::UpdateUsdAttribute<SpecializedEltType>(const UsdBridgeLogObject& logObj,\
+    const void* arrayData, UsdBridgeType arrayDataType, size_t arrayNumElements,\
+    const ::PXR_NS::UsdAttribute& attrib, const ::PXR_NS::UsdTimeCode& timeCode, bool timeVaryingUpdate);
+
+UPDATE_USD_ATTRIBUTE_EXPLICIT_DEFINITION(UsdBridgeNoneType)
+UPDATE_USD_ATTRIBUTE_EXPLICIT_DEFINITION(::PXR_NS::GfVec3f)

@@ -187,13 +187,13 @@ if(${USD_DEVICE_USE_USDRT})
     "${USDRT_INCLUDE_DIR}/../.."
     ${CARBSDK_INCLUDE_DIR}
   )
-  target_link_libraries(UsdBridge PRIVATE CUDA::cudart)
+  target_link_libraries(UsdBridge PRIVATE "${CARBSDK_BIN_DIR}/carb${CMAKE_STATIC_LIBRARY_SUFFIX}" CUDA::cudart)
+
   target_compile_definitions(UsdBridge PRIVATE USE_USDRT)
   if(${USD_DEVICE_USE_FABRIC})
-    target_compile_definitions(UsdBridge PRIVATE USE_FABRIC )
+    target_compile_definitions(UsdBridge PRIVATE USE_FABRIC)
   endif()
   if(${USD_DEVICE_STANDALONE_CARBSDK})
-    target_link_libraries(UsdBridge PRIVATE "${CARBSDK_BIN_DIR}/carb${CMAKE_STATIC_LIBRARY_SUFFIX}")
     target_compile_definitions(UsdBridge PRIVATE STANDALONE_CARBSDK)
   endif()
 endif()
@@ -256,6 +256,16 @@ if(${INSTALL_USD_DEPS})
       DESTINATION ${PLATFORM_INSTALL_LIBDIR}
       FILES_MATCHING
       REGEX "${RTXPLUGINS_BIN_DIR}/plugins/omni.usd/[^/]*$")
+    install(
+      DIRECTORY "${RTXPLUGINS_BIN_DIR}/"
+      DESTINATION ${PLATFORM_INSTALL_LIBDIR}
+      FILES_MATCHING
+      REGEX "${RTXPLUGINS_BIN_DIR}/plugins/omni.usd/[^/]*$")
+    install(
+      DIRECTORY "${CUDAToolkit_ROOT}/../${PLATFORM_INSTALL_LIBDIR}"
+      DESTINATION ${PLATFORM_INSTALL_LIBDIR}
+      FILES_MATCHING
+      REGEX "/cudart[0-9_]*${CMAKE_SHARED_LIBRARY_SUFFIX}$")
   endif()
 endif()
 

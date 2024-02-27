@@ -14,7 +14,8 @@ class UsdBridgeRt
     UsdBridgeRt(const ::PXR_NS::UsdStagePtr& sceneStage, const ::PXR_NS::UsdStagePtr& timeVarStage, const ::PXR_NS::SdfPath& primPath);
     ~UsdBridgeRt();
 
-    void UpdateAttributes(const UsdBridgeLogObject& logObj, const void* arrayData, UsdBridgeType arrayDataType, size_t arrayNumElements, 
+    template<typename ReturnEltType = UsdBridgeNoneType>
+    UsdBridgeSpanI<ReturnEltType>* UpdateUsdAttribute(const UsdBridgeLogObject& logObj, const void* arrayData, UsdBridgeType arrayDataType, size_t arrayNumElements,
       const ::PXR_NS::UsdAttribute& attrib, const ::PXR_NS::UsdTimeCode& timeCode, bool timeVaryingUpdate);
 
   protected:

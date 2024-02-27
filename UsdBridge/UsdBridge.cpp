@@ -10,11 +10,10 @@
 #include <memory>
 #include <algorithm>
 
-#ifdef STANDALONE_CARBSDK
+#ifdef USE_USDRT
 #include "carb/ClientUtils.h"
 #include "carb/logging/ILogging.h"
 #include "carb/logging/Logger.h"
-
 CARB_GLOBALS("anariUsdBridge")
 #endif
 
@@ -139,7 +138,7 @@ struct UsdBridgeInternals
         this->Cache.RemoveChild(parentCache, it->second.get());
     };
 
-#ifdef STANDALONE_CARBSDK
+#ifdef USE_USDRT
     InitializeCarbSDK();
 #endif
   }
@@ -181,7 +180,7 @@ struct UsdBridgeInternals
   SdfPrimPathList TempPrimPaths;
   SdfPrimPathList ProtoPrimPaths;
 
-#ifdef STANDALONE_CARBSDK
+#ifdef USE_USDRT
   void InitializeCarbSDK();
   void CleanupCarbSDK();
 
@@ -266,7 +265,7 @@ bool HasNullHandles(const HandleType* handles, uint64_t numHandles)
   return false;
 }
 
-#ifdef STANDALONE_CARBSDK
+#ifdef USE_USDRT
 struct UsdBridgeCarbLogger : public carb::logging::Logger
 {
   UsdBridgeCarbLogger()
@@ -323,7 +322,11 @@ void UsdBridgeInternals::InitializeCarbSDK()
   static bool isInitialized = false;
   if(!isInitialized)
   {
+#ifdef STANDALONE_CARBSDK
     if(carb::Framework* framework = carb::acquireFrameworkAndRegisterBuiltins())
+#else
+    if(carb::Framework* framework = carb::getFramework())
+#endif
     {
       framework->registerPlugin(g_carbClientName, framework->getBuiltinLoggingDesc());
     }
@@ -1141,7 +1144,7 @@ void UsdBridge::SetConnectionLogVerbosity(int logVerbosity)
   int logLevel = UsdBridgeRemoteConnection::GetConnectionLogLevelMax() - logVerbosity; // Just invert verbosity to get the level
   UsdBridgeRemoteConnection::SetConnectionLogLevel(logLevel);
 
-#ifdef STANDALONE_CARBSDK
+#ifdef USE_USDRT
   UsdBridgeCarbLogger::SetCarbLogVerbosity(logVerbosity);
 #endif
 }

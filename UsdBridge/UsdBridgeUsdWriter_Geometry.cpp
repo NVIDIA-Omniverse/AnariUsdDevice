@@ -9,6 +9,45 @@
 
 namespace
 {
+  template<typename GeomDataType>
+  struct UsdGeomUpdateArguments
+  {
+    UsdBridgeRt& UsdRtData;
+    const GeomDataType& GeomData;
+    uint64_t NumPrims;
+    UsdBridgeUpdateEvaluator<const GeomDataType>& UpdateEval;
+    TimeEvaluator<GeomDataType>& TimeEval;
+  };
+  #define UNPACK_UPDATE_ARGS\
+    UsdBridgeRt& usdRtData = updateArgs.UsdRtData;\
+    const GeomDataType& geomData = updateArgs.GeomData;\
+    uint64_t numPrims = updateArgs.NumPrims;\
+    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval = updateArgs.UpdateEval;\
+    TimeEvaluator<GeomDataType>& timeEval = updateArgs.TimeEval;
+
+  template<typename UsdGeomType>
+  struct UsdGeomUpdateAttribArgs
+  {
+    const UsdBridgeLogObject& LogObj;
+    UsdGeomType& TimeVarGeom;
+    UsdGeomType& UniformGeom;
+  };
+  #define UNPACK_ATTRIB_ARGS\
+    const UsdBridgeLogObject& logObj = attribArgs.LogObj;\
+    UsdGeomType& timeVarGeom = attribArgs.TimeVarGeom;\
+    UsdGeomType& uniformGeom = attribArgs.UniformGeom;
+
+  struct UsdGeomUpdatePrimvarArgs
+  {
+    UsdBridgeUsdWriter* Writer;
+    UsdGeomPrimvarsAPI& TimeVarPrimvars;
+    UsdGeomPrimvarsAPI& UniformPrimvars;
+  };
+  #define UNPACK_PRIMVAR_ARGS\
+    UsdBridgeUsdWriter* writer = primvarArgs.Writer;\
+    UsdGeomPrimvarsAPI& timeVarPrimvars = primvarArgs.TimeVarPrimvars;\
+    UsdGeomPrimvarsAPI& uniformPrimvars = primvarArgs.UniformPrimvars;
+
   template<typename UsdGeomType>
   UsdAttribute UsdGeomGetPointsAttribute(UsdGeomType& usdGeom) { return UsdAttribute(); }
 
@@ -271,10 +310,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomPoints(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomPoints(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::POINTS);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::POINTS);
 
@@ -297,36 +337,44 @@ namespace
 
         const void* arrayData = geomData.Points;
         size_t arrayNumElements = geomData.NumPoints;
-        UsdAttribute arrayPrimvar = pointsAttr;
-        VtVec3fArray& usdVerts = GetStaticTempArray<VtVec3fArray>(arrayNumElements);
-        bool setPrimvar = true;
+        UsdBridgeType arrayDataType = geomData.PointsType;
 
-        switch (geomData.PointsType)
+        // USDRT_REM
+        //UsdAttribute arrayPrimvar = pointsAttr;
+        //VtVec3fArray& usdVerts = GetStaticTempArray<VtVec3fArray>(arrayNumElements);
+        //bool setPrimvar = true;
+        //switch (geomData.PointsType)
+        //{
+        //case UsdBridgeType::FLOAT3: {ASSIGN_PRIMVAR_CUSTOM_ARRAY_MACRO(VtVec3fArray, usdVerts); break; }
+        //case UsdBridgeType::DOUBLE3: {ASSIGN_PRIMVAR_CONVERT_CUSTOM_ARRAY_MACRO(VtVec3fArray, GfVec3d, usdVerts); break; }
+        //default: { UsdBridgeLogMacro(logObj, UsdBridgeLogLevel::ERR, "UsdGeom PointsAttr should be FLOAT3 or DOUBLE3."); break; }
+        //}
+
+        UsdBridgeSpanI<GfVec3f>* pointSpan = usdRtData.UpdateUsdAttribute<GfVec3f>(logObj, arrayData, arrayDataType, arrayNumElements, pointsAttr, timeCode, timeVaryingUpdate);
+
+        if(pointSpan)
         {
-        case UsdBridgeType::FLOAT3: {ASSIGN_PRIMVAR_CUSTOM_ARRAY_MACRO(VtVec3fArray, usdVerts); break; }
-        case UsdBridgeType::DOUBLE3: {ASSIGN_PRIMVAR_CONVERT_CUSTOM_ARRAY_MACRO(VtVec3fArray, GfVec3d, usdVerts); break; }
-        default: { UsdBridgeLogMacro(logObj, UsdBridgeLogLevel::ERR, "UsdGeom PointsAttr should be FLOAT3 or DOUBLE3."); break; }
-        }
+          // Usd requires extent.
+          GfRange3f extent;
+          for (GfVec3f& pt : *pointSpan) {
+            extent.UnionWith(pt);
+          }
+          VtVec3fArray extentArray(2);
+          extentArray[0] = extent.GetMin();
+          extentArray[1] = extent.GetMax();
 
-        // Usd requires extent.
-        GfRange3f extent;
-        for (const auto& pt : usdVerts) {
-          extent.UnionWith(pt);
+          outGeom->GetExtentAttr().Set(extentArray, timeCode);
         }
-        VtVec3fArray extentArray(2);
-        extentArray[0] = extent.GetMin();
-        extentArray[1] = extent.GetMax();
-
-        outGeom->GetExtentAttr().Set(extentArray, timeCode);
       }
     }
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomIndices(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomIndices(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::INDICES);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::INDICES);
 
@@ -379,10 +427,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomNormals(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomNormals(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::NORMALS);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::NORMALS);
 
@@ -421,10 +470,11 @@ namespace
   }
 
   template<typename GeomDataType>
-  void UpdateUsdGeomTexCoords(UsdBridgeUsdWriter* writer, UsdGeomPrimvarsAPI& timeVarPrimvars, UsdGeomPrimvarsAPI& uniformPrimvars, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomTexCoords(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdatePrimvarArgs& primvarArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_PRIMVAR_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::ATTRIBUTE0);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::ATTRIBUTE0);
 
@@ -468,10 +518,10 @@ namespace
   }
 
   template<typename GeomDataType>
-  void UpdateUsdGeomAttribute(UsdBridgeUsdWriter* writer, UsdBridgeRt& usdRtData,
-    UsdGeomPrimvarsAPI& timeVarPrimvars, UsdGeomPrimvarsAPI& uniformPrimvars, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval, uint32_t attribIndex)
+  void UpdateUsdGeomAttribute(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdatePrimvarArgs& primvarArgs, uint32_t attribIndex)
   {
+    UNPACK_UPDATE_ARGS UNPACK_PRIMVAR_ARGS
+
     assert(attribIndex < geomData.NumAttributes);
     const UsdBridgeAttribute& bridgeAttrib = geomData.Attributes[attribIndex];
 
@@ -516,7 +566,7 @@ namespace
 
           // USDRT_REM
           //AssignAttribArrayToPrimvar(writer->LogObject, arrayData, bridgeAttrib.DataType, arrayNumElements, arrayPrimvar, timeCode);
-          usdRtData.UpdateAttributes(writer->LogObject, arrayData, bridgeAttrib.DataType, arrayNumElements, arrayPrimvar, timeCode, timeVaryingUpdate);
+          usdRtData.UpdateUsdAttribute(writer->LogObject, arrayData, bridgeAttrib.DataType, arrayNumElements, arrayPrimvar, timeCode, timeVaryingUpdate);
 
           // Per face or per-vertex interpolation. This will break timesteps that have been written before.
           TfToken attribInterpolation = bridgeAttrib.PerPrimData ? UsdGeomTokens->uniform : UsdGeomTokens->vertex;
@@ -531,24 +581,25 @@ namespace
   }
 
   template<typename GeomDataType>
-  void UpdateUsdGeomAttributes(UsdBridgeUsdWriter* writer, UsdBridgeRt& usdRtData,
-    UsdGeomPrimvarsAPI& timeVarPrimvars, UsdGeomPrimvarsAPI& uniformPrimvars, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomAttributes(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdatePrimvarArgs& primvarArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_PRIMVAR_ARGS
+
     uint32_t startIdx = 0;
     for(uint32_t attribIndex = startIdx; attribIndex < geomData.NumAttributes; ++attribIndex)
     {
       const UsdBridgeAttribute& attrib = geomData.Attributes[attribIndex];
       if(attrib.DataType != UsdBridgeType::UNDEFINED)
-        UpdateUsdGeomAttribute(writer, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval, attribIndex);
+        UpdateUsdGeomAttribute(updateArgs, primvarArgs, attribIndex);
     }
   }
 
   template<typename GeomDataType>
-  void UpdateUsdGeomColors(UsdBridgeUsdWriter* writer, UsdGeomPrimvarsAPI& timeVarPrimvars, UsdGeomPrimvarsAPI& uniformPrimvars, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomColors(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdatePrimvarArgs& primvarArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_PRIMVAR_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::COLORS);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::COLORS);
 
@@ -583,10 +634,11 @@ namespace
 
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomInstanceIds(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomInstanceIds(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::INSTANCEIDS);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::INSTANCEIDS);
 
@@ -623,10 +675,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomWidths(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomWidths(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::SCALES);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::SCALES);
 
@@ -672,10 +725,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomScales(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomScales(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::SCALES);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::SCALES);
 
@@ -722,10 +776,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomOrientNormals(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomOrientNormals(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::ORIENTATIONS);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::ORIENTATIONS);
 
@@ -764,10 +819,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomOrientations(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomOrientations(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::ORIENTATIONS);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::ORIENTATIONS);
 
@@ -795,7 +851,6 @@ namespace
               const float* orients = reinterpret_cast<const float*>(geomData.Orientations);
               usdOrients[i] = GfQuath(orients[i * 4], orients[i * 4 + 1], orients[i * 4 + 2], orients[i * 4 + 3]);
             }
-            orientationsAttribute.Set(usdOrients, timeCode);
             break;
           }
         default: { UsdBridgeLogMacro(logObj, UsdBridgeLogLevel::ERR, "UsdGeom OrientationsAttribute should be FLOAT3, DOUBLE3 or FLOAT4."); break; }
@@ -819,10 +874,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomProtoIndices(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomProtoIndices(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::SHAPEINDICES);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::SHAPEINDICES);
 
@@ -859,10 +915,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomLinearVelocities(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomLinearVelocities(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::LINEARVELOCITIES);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::LINEARVELOCITIES);
 
@@ -892,10 +949,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomAngularVelocities(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomAngularVelocities(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::ANGULARVELOCITIES);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::ANGULARVELOCITIES);
 
@@ -925,10 +983,11 @@ namespace
   }
 
   template<typename UsdGeomType, typename GeomDataType>
-  void UpdateUsdGeomInvisibleIds(const UsdBridgeLogObject& logObj, UsdGeomType& timeVarGeom, UsdGeomType& uniformGeom, const GeomDataType& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const GeomDataType>& updateEval, TimeEvaluator<GeomDataType>& timeEval)
+  void UpdateUsdGeomInvisibleIds(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename GeomDataType::DataMemberId;
+
     bool performsUpdate = updateEval.PerformsUpdate(DMI::INVISIBLEIDS);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::INVISIBLEIDS);
 
@@ -966,10 +1025,12 @@ namespace
     }
   }
 
-  static void UpdateUsdGeomCurveLengths(const UsdBridgeLogObject& logObj, UsdGeomBasisCurves& timeVarGeom, UsdGeomBasisCurves& uniformGeom, const UsdBridgeCurveData& geomData, uint64_t numPrims,
-    UsdBridgeUpdateEvaluator<const UsdBridgeCurveData>& updateEval, TimeEvaluator<UsdBridgeCurveData>& timeEval)
+  template<typename UsdGeomType, typename GeomDataType>
+  void UpdateUsdGeomCurveLengths(UsdGeomUpdateArguments<GeomDataType>& updateArgs, UsdGeomUpdateAttribArgs<UsdGeomType>& attribArgs)
   {
+    UNPACK_UPDATE_ARGS UNPACK_ATTRIB_ARGS
     using DMI = typename UsdBridgeCurveData::DataMemberId;
+
     // Fill geom prim and geometry layer with data.
     bool performsUpdate = updateEval.PerformsUpdate(DMI::CURVELENGTHS);
     bool timeVaryingUpdate = timeEval.IsTimeVarying(DMI::CURVELENGTHS);
@@ -1110,11 +1171,11 @@ void UsdBridgeUsdWriter::UpdateUsdGeometryManifest(const UsdBridgePrimCache* cac
 }
 #endif
 
-#define UPDATE_USDGEOM_ARRAYS(FuncDef) \
-  FuncDef(this->LogObject, timeVarGeom, uniformGeom, geomData, numPrims, updateEval, timeEval)
+#define UPDATE_USDGEOM_ATTRIB_ARRAYS(FuncDef) \
+  FuncDef(updateArgs, attribArgs)
 
 #define UPDATE_USDGEOM_PRIMVAR_ARRAYS(FuncDef) \
-  FuncDef(this, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval)
+  FuncDef(updateArgs, primvarArgs)
 
 void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, const SdfPath& meshPath, const UsdBridgeMeshData& geomData, double timeStep)
 {
@@ -1131,19 +1192,22 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
   UsdBridgeUpdateEvaluator<const UsdBridgeMeshData> updateEval(geomData);
   TimeEvaluator<UsdBridgeMeshData> timeEval(geomData, timeStep);
 
-  UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, meshPath);
-
   assert((geomData.NumIndices % geomData.FaceVertexCount) == 0);
   uint64_t numPrims = int(geomData.NumIndices) / geomData.FaceVertexCount;
 
-  UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomPoints);
-  UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomNormals);
+  UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, meshPath);
+
+  UsdGeomUpdateArguments<UsdBridgeMeshData> updateArgs = { usdRtData, geomData, numPrims, updateEval, timeEval };
+  UsdGeomUpdateAttribArgs<UsdGeomMesh> attribArgs = { this->LogObject, timeVarGeom, uniformGeom };
+  UsdGeomUpdatePrimvarArgs primvarArgs = { this, timeVarPrimvars, uniformPrimvars };
+
+  UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomPoints);
+  UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomNormals);
   if( Settings.EnableStTexCoords && UsdGeomDataHasTexCoords(geomData) )
     { UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomTexCoords); }
-  //UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes); // USDRT_REM
-  UpdateUsdGeomAttributes(this, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval);
+  UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes);
   UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomColors);
-  UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomIndices);
+  UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomIndices);
 }
 
 void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, const SdfPath& instancerPath, const UsdBridgeInstancerData& geomData, double timeStep)
@@ -1167,14 +1231,19 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
     assert(timeVarGeom);
     UsdGeomPrimvarsAPI timeVarPrimvars(timeVarGeom);
 
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomPoints);
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomInstanceIds);
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomWidths);
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomOrientNormals);
+    UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, instancerPath);
+
+    UsdGeomUpdateArguments<UsdBridgeInstancerData> updateArgs = { usdRtData, geomData, numPrims, updateEval, timeEval };
+    UsdGeomUpdateAttribArgs<UsdGeomPoints> attribArgs = { this->LogObject, timeVarGeom, uniformGeom };
+    UsdGeomUpdatePrimvarArgs primvarArgs = { this, timeVarPrimvars, uniformPrimvars };
+
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomPoints);
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomInstanceIds);
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomWidths);
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomOrientNormals);
     if( Settings.EnableStTexCoords && UsdGeomDataHasTexCoords(geomData) )
       { UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomTexCoords); }
-    //UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes); // USDRT_REM
-    UpdateUsdGeomAttributes(this, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval);
+    UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes);
     UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomColors);
   }
   else
@@ -1187,19 +1256,24 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
     assert(timeVarGeom);
     UsdGeomPrimvarsAPI timeVarPrimvars(timeVarGeom);
 
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomPoints);
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomInstanceIds);
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomScales);
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomOrientations);
+    UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, instancerPath);
+
+    UsdGeomUpdateArguments<UsdBridgeInstancerData> updateArgs = { usdRtData, geomData, numPrims, updateEval, timeEval };
+    UsdGeomUpdateAttribArgs<UsdGeomPointInstancer> attribArgs = { this->LogObject, timeVarGeom, uniformGeom };
+    UsdGeomUpdatePrimvarArgs primvarArgs = { this, timeVarPrimvars, uniformPrimvars };
+
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomPoints);
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomInstanceIds);
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomScales);
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomOrientations);
     if( Settings.EnableStTexCoords && UsdGeomDataHasTexCoords(geomData) )
       { UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomTexCoords); }
-    //UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes); // USDRT_REM
-    UpdateUsdGeomAttributes(this, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval);
+    UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes);
     UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomColors);
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomProtoIndices);
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomProtoIndices);
     //UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomLinearVelocities);
     //UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomAngularVelocities);
-    UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomInvisibleIds);
+    UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomInvisibleIds);
   }
 }
 
@@ -1218,19 +1292,22 @@ void UsdBridgeUsdWriter::UpdateUsdGeometry(const UsdStagePtr& timeVarStage, cons
   UsdBridgeUpdateEvaluator<const UsdBridgeCurveData> updateEval(geomData);
   TimeEvaluator<UsdBridgeCurveData> timeEval(geomData, timeStep);
 
-  UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, curvePath);
-
   uint64_t numPrims = geomData.NumCurveLengths;
 
-  UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomPoints);
-  UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomNormals);
+  UsdBridgeRt usdRtData(this->SceneStage, timeVarStage, curvePath);
+
+  UsdGeomUpdateArguments<UsdBridgeCurveData> updateArgs = { usdRtData, geomData, numPrims, updateEval, timeEval };
+  UsdGeomUpdateAttribArgs<UsdGeomBasisCurves> attribArgs = { this->LogObject, timeVarGeom, uniformGeom };
+  UsdGeomUpdatePrimvarArgs primvarArgs = { this, timeVarPrimvars, uniformPrimvars };
+
+  UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomPoints);
+  UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomNormals);
   if( Settings.EnableStTexCoords && UsdGeomDataHasTexCoords(geomData) )
     { UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomTexCoords); }
-  //UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes); // USDRT_REM
-  UpdateUsdGeomAttributes(this, usdRtData, timeVarPrimvars, uniformPrimvars, geomData, numPrims, updateEval, timeEval);
+  UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomAttributes);
   UPDATE_USDGEOM_PRIMVAR_ARRAYS(UpdateUsdGeomColors);
-  UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomWidths);
-  UPDATE_USDGEOM_ARRAYS(UpdateUsdGeomCurveLengths);
+  UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomWidths);
+  UPDATE_USDGEOM_ATTRIB_ARRAYS(UpdateUsdGeomCurveLengths);
 }
 
 void UsdBridgeUsdWriter::UpdateUsdInstancerPrototypes(const SdfPath& instancerPath, const UsdBridgeInstancerRefData& geomRefData,
