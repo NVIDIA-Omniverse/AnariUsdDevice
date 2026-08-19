@@ -42,6 +42,8 @@ typedef struct TexData
   int textureSize[2];
 } TexData_t;
 
+int g_anariInitFailed = 0;
+
 float transform[16] = {
   3.0f, 0.0f, 0.0f, 0.0f,
   0.0f, 3.0f, 0.0f, 0.0f,
@@ -600,7 +602,7 @@ void changeAndRender(ANARIDevice dev, ANARIArray1D positionArray, ANARIFrame fra
   anariUnmapArray(dev, positionArray);
 }
 
-void doTest(TestParameters_t testParams)
+void doTest(ANARILibrary lib, TestParameters_t testParams)
 {
   printf("\n\n--------------  Starting new test iteration \n\n");
   printf("Parameters: writeatcommit %d, useVertexColors %d, useTexture %d,  transparent %d, geom type %s \n",
@@ -644,12 +646,11 @@ void doTest(TestParameters_t testParams)
 
   printf("initialize ANARI...");
 
-  ANARILibrary lib = anariLoadLibrary(g_libraryType, statusFunc, NULL);
-
   ANARIDevice dev = anariNewDevice(lib, "usd");
 
   if (!dev) {
     printf("\n\nERROR: could not load device '%s'\n", "usd");
+    g_anariInitFailed = 1;
     return;
   }
 
@@ -807,8 +808,6 @@ void doTest(TestParameters_t testParams)
 
   anariRelease(dev, dev);
 
-  anariUnloadLibrary(lib);
-
   freeTexture(textureData);
   freeSineWaveGrid(&gridData);
 
@@ -818,6 +817,12 @@ void doTest(TestParameters_t testParams)
 int main(int argc, const char **argv)
 {
   parseArgs(argc, argv);
+
+  ANARILibrary lib = anariLoadLibrary(g_libraryType, statusFunc, NULL);
+  if (!lib) {
+    fprintf(stderr, "\n\nERROR: could not load ANARI library '%s'\n", g_libraryType);
+    return 1;
+  }
 
   TestParameters_t testParams;
 
@@ -829,45 +834,45 @@ int main(int argc, const char **argv)
   // Test standard flow with textures
   testParams.useVertexColors = 0;
   testParams.useTexture = 1;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // With vertex colors
   testParams.useVertexColors = 1;
   testParams.useTexture = 0;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // With color constant
   testParams.useVertexColors = 0;
   testParams.useTexture = 0;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // With changing position array
   testParams.changePositionArray = 1;
-  doTest(testParams);
+  doTest(lib, testParams);
   testParams.changePositionArray = 0;
 
   // Transparency
   testParams.useVertexColors = 0;
   testParams.useTexture = 0;
   testParams.isTransparent = 1;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // Transparency (vertex)
   testParams.useVertexColors = 1;
   testParams.useTexture = 0;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // Transparency (sampler)
   testParams.useVertexColors = 0;
   testParams.useTexture = 1;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // Test immediate mode writing
   testParams.writeAtCommit = 1;
   testParams.useVertexColors = 0;
   testParams.useTexture = 1;
   testParams.isTransparent = 0;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // Cones tests
   testParams.testType = TEST_CONES;
@@ -877,16 +882,16 @@ int main(int argc, const char **argv)
 
   // With vertex colors
   testParams.useVertexColors = 1;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // With color constant
   testParams.useVertexColors = 0;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // Using indices (and vertex colors)
   testParams.useIndices = 1;
   testParams.useVertexColors = 1;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // Glyphs tests
   testParams.testType = TEST_GLYPHS;
@@ -897,16 +902,18 @@ int main(int argc, const char **argv)
 
   // With vertex colors
   testParams.useVertexColors = 1;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // With color constant
   testParams.useVertexColors = 0;
-  doTest(testParams);
+  doTest(lib, testParams);
 
   // Using glyph mesh (and vertex colors)
   testParams.useGlyphMesh = 1;
   testParams.useVertexColors = 1;
-  doTest(testParams);
+  doTest(lib, testParams);
 
-  return 0;
+  anariUnloadLibrary(lib);
+
+  return g_anariInitFailed ? 1 : 0;
 }

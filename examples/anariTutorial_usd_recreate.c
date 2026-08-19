@@ -99,16 +99,27 @@ int main(int argc, const char **argv)
 
   float kd[] = { 0.0f, 0.0f, 1.0f };
 
+  ANARILibrary lib = NULL;
+
   for(int anariPass = 0; anariPass < 2; ++anariPass)
   {
     printf("initialize ANARI...");
 
-    ANARILibrary lib = anariLoadLibrary(g_libraryType, statusFunc, NULL);
+    if (!lib) {
+      lib = anariLoadLibrary(g_libraryType, statusFunc, NULL);
+      if (!lib) {
+        fprintf(stderr, "\n\nERROR: could not load ANARI library '%s'\n", g_libraryType);
+        freeTexture(textureData);
+        return 1;
+      }
+    }
 
     ANARIDevice dev = anariNewDevice(lib, "usd");
 
     if (!dev) {
       printf("\n\nERROR: could not load device '%s'\n", "usd");
+      anariUnloadLibrary(lib);
+      freeTexture(textureData);
       return 1;
     }
 
@@ -346,8 +357,6 @@ int main(int argc, const char **argv)
 
     anariRelease(dev, dev);
 
-    anariUnloadLibrary(lib);
-
     printf("done!\n");
 
     for(int vIdx = 0; vIdx < sizeof(vertex)/sizeof(float); ++vIdx)
@@ -355,6 +364,8 @@ int main(int argc, const char **argv)
       vertex[vIdx] += 1.0f;
     }
   }
+
+  anariUnloadLibrary(lib);
 
   freeTexture(textureData);
 

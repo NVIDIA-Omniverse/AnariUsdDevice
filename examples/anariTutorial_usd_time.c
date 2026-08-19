@@ -711,6 +711,7 @@ int main(int argc, const char **argv)
   anariRelease(dev, texArray);
 
   anariRelease(dev, dev);
+  anariUnloadLibrary(lib);
 
   freeTexture(textureData);
 
